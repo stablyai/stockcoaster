@@ -1,4 +1,6 @@
 # ⛏ STOCKCOASTER 📈
+1-shotted w/ Claude Fable (and made with [Orca 🐋](https://github.com/stablyai/orca))
+Try now: https://stockcoaster.vercel.app/
 
 A Minecraft-like browser game where you ride rollercoasters that are **real stock
 charts**. Altitude is the (log-scaled) price: start NVIDIA in a lava trench at its
