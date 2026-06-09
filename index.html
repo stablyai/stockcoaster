@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>STOCKCOASTER — Ride the Market</title>
+  <style>
+    :root {
+      --px-border: #1b1b1b;
+      --grass: #6abe30;
+      --gold: #fcd34d;
+      --red: #ef4444;
+      --green: #4ade80;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+    body, button, input {
+      font-family: 'Courier New', ui-monospace, Menlo, monospace;
+      font-weight: bold;
+      -webkit-font-smoothing: none;
+    }
+    canvas#game { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+
+    /* ---------- pixel UI primitives ---------- */
+    .panel {
+      background: #3a3a3a;
+      border: 4px solid #1b1b1b;
+      box-shadow: inset 4px 4px 0 #555, inset -4px -4px 0 #222;
+      color: #eee;
+    }
+    .btn {
+      display: inline-block;
+      cursor: pointer;
+      background: #6f6f6f;
+      border: 3px solid #1b1b1b;
+      box-shadow: inset 3px 3px 0 #9c9c9c, inset -3px -3px 0 #4a4a4a;
+      color: #fff;
+      text-shadow: 2px 2px 0 #3f3f3f;
+      padding: 10px 18px;
+      font-size: 15px;
+      letter-spacing: 1px;
+      user-select: none;
+    }
+    .btn:hover { background: #7d9c52; box-shadow: inset 3px 3px 0 #a8c878, inset -3px -3px 0 #5a7038; }
+    .btn:active { box-shadow: inset -3px -3px 0 #9c9c9c, inset 3px 3px 0 #4a4a4a; }
+
+    /* ---------- main menu ---------- */
+    #menu {
+      position: fixed; inset: 0; z-index: 30;
+      overflow-y: auto;
+      background:
+        linear-gradient(rgba(8, 10, 18, .82), rgba(8, 10, 18, .92)),
+        repeating-conic-gradient(#3e2f23 0% 25%, #46362a 0% 50%) 0 0/64px 64px;
+      padding: 28px 4vw 60px;
+    }
+    #menu h1 {
+      text-align: center;
+      font-size: clamp(28px, 5vw, 54px);
+      color: var(--gold);
+      letter-spacing: 4px;
+      text-shadow: 4px 4px 0 #7c2d12, 8px 8px 0 rgba(0,0,0,.55);
+      margin-bottom: 6px;
+    }
+    #menu .subtitle {
+      text-align: center; color: #b6e3a3; font-size: 14px; letter-spacing: 2px;
+      text-shadow: 2px 2px 0 #143601; margin-bottom: 26px;
+    }
+    #rides {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 18px; max-width: 1500px; margin: 0 auto;
+    }
+    .ride-card { padding: 14px; cursor: pointer; transition: transform .06s; position: relative; }
+    .ride-card:hover { transform: translate(-2px,-2px); outline: 3px solid var(--gold); }
+    .ride-card h2 { font-size: 22px; color: #fff; text-shadow: 2px 2px 0 #000; }
+    .ride-card .co { color: #9ca3af; font-size: 12px; margin: 2px 0 8px; }
+    .ride-card canvas { width: 100%; height: 74px; image-rendering: pixelated; border: 3px solid #1b1b1b; background: #0d1117; }
+    .ride-card .tagline { color: #d8c79a; font-size: 12px; min-height: 30px; margin: 8px 0; line-height: 1.45; }
+    .ride-card .stats { display: flex; justify-content: space-between; font-size: 12px; color: #cbd5e1; }
+    .ride-card .stats b.up { color: var(--green); } .ride-card .stats b.down { color: var(--red); }
+    .difficulty {
+      position: absolute; top: -10px; right: 10px; font-size: 11px; padding: 4px 8px;
+      border: 3px solid #1b1b1b; color: #111; letter-spacing: 1px;
+    }
+    #menu .help-line { text-align: center; color: #94a3b8; font-size: 12px; margin-top: 30px; line-height: 2; }
+    #menu .help-line kbd { background: #1f2937; border: 2px solid #4b5563; padding: 1px 7px; color: #fbbf24; }
+
+    /* ---------- HUD ---------- */
+    /* z-index 22: above the pause overlay (20) so the minimap stays clickable */
+    #hud { position: fixed; inset: 0; z-index: 22; pointer-events: none; display: none; }
+    #hud.active { display: block; }
+    .hud-box {
+      position: absolute; padding: 8px 14px;
+      background: rgba(10, 12, 20, .68);
+      border: 3px solid rgba(0,0,0,.85);
+      box-shadow: inset 2px 2px 0 rgba(255,255,255,.12);
+      color: #fff; text-shadow: 2px 2px 0 #000;
+    }
+    #hud-symbol { top: 14px; left: 14px; font-size: 20px; color: var(--gold); }
+    #hud-symbol small { display: block; font-size: 11px; color: #cbd5e1; margin-top: 2px; }
+    #hud-date { top: 14px; left: 50%; transform: translateX(-50%); font-size: 26px; letter-spacing: 2px; text-align: center; }
+    #hud-date small { display: block; font-size: 11px; color: #94a3b8; letter-spacing: 1px; }
+    #hud-price { top: 14px; right: 14px; font-size: 20px; text-align: right; }
+    #hud-price .pct { display: block; font-size: 14px; margin-top: 2px; }
+    #hud-price .pct.up { color: var(--green); } #hud-price .pct.down { color: var(--red); }
+    #hud-zone { bottom: 14px; right: 14px; font-size: 14px; text-align: right; color: #c7d2fe; }
+    #hud-zone .speed { display: block; color: #fde68a; font-size: 12px; margin-top: 3px; }
+    #hud-chart-box { bottom: 14px; left: 14px; padding: 6px; pointer-events: auto; cursor: crosshair; }
+    #hud-chart-box:hover { outline: 2px solid var(--gold); }
+    #hud-chart { width: 280px; height: 84px; display: block; image-rendering: pixelated; }
+    #hud-toast {
+      bottom: 110px; left: 50%; transform: translateX(-50%);
+      max-width: 720px; font-size: 15px; line-height: 1.5; text-align: center;
+      border-color: #92740c; display: none;
+    }
+    #hud-toast .toast-date { color: var(--gold); font-size: 12px; letter-spacing: 1px; }
+    #hud-ath {
+      top: 84px; left: 50%; transform: translateX(-50%);
+      color: var(--gold); font-size: 30px; letter-spacing: 3px;
+      text-shadow: 3px 3px 0 #7c2d12; display: none; pointer-events: none;
+      animation: athpulse .5s infinite alternate;
+    }
+    @keyframes athpulse { from { transform: translateX(-50%) scale(1); } to { transform: translateX(-50%) scale(1.12); } }
+    #hud-hint { bottom: 46px; left: 50%; transform: translateX(-50%); font-size: 12px; color: #cbd5e1; }
+
+    /* ---------- ride-end summary ---------- */
+    #summary {
+      position: fixed; inset: 0; z-index: 25; display: none;
+      align-items: center; justify-content: center;
+      background: rgba(5, 8, 14, .8);
+    }
+    #summary .panel { width: min(560px, 92vw); padding: 28px; text-align: center; }
+    #summary h2 { color: var(--gold); font-size: 26px; letter-spacing: 2px; text-shadow: 3px 3px 0 #7c2d12; margin-bottom: 18px; }
+    #summary .rows { text-align: left; margin: 0 auto 22px; max-width: 420px; font-size: 15px; line-height: 2.1; color: #e5e7eb; }
+    #summary .rows span { float: right; }
+    #summary .up { color: var(--green); } #summary .down { color: var(--red); }
+    #summary .btn { margin: 0 8px; }
+
+    /* ---------- click-to-start overlay ---------- */
+    #lock-hint {
+      position: fixed; inset: 0; z-index: 20; display: none;
+      align-items: center; justify-content: center; flex-direction: column; gap: 14px;
+      background: rgba(5, 8, 14, .55); color: #fff; cursor: pointer;
+      text-shadow: 2px 2px 0 #000; text-align: center;
+    }
+    #lock-hint .big { font-size: 26px; color: var(--gold); letter-spacing: 2px; }
+    #lock-hint .small { font-size: 13px; color: #cbd5e1; line-height: 2; }
+    #lock-hint kbd { background: #1f2937; border: 2px solid #4b5563; padding: 1px 7px; color: #fbbf24; }
+
+    #loading {
+      position: fixed; inset: 0; z-index: 40; display: none;
+      align-items: center; justify-content: center;
+      background: #0a0c14; color: var(--gold); font-size: 20px; letter-spacing: 2px;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="menu"></div>
+
+  <div id="hud">
+    <div class="hud-box" id="hud-symbol"></div>
+    <div class="hud-box" id="hud-date"></div>
+    <div class="hud-box" id="hud-price"></div>
+    <div class="hud-box" id="hud-chart-box"><canvas id="hud-chart" width="280" height="84"></canvas></div>
+    <div class="hud-box" id="hud-zone"></div>
+    <div class="hud-box" id="hud-toast"></div>
+    <div id="hud-ath">★ ALL-TIME HIGH ★</div>
+    <div class="hud-box" id="hud-hint"></div>
+  </div>
+
+  <div id="lock-hint">
+    <div class="big">CLICK TO RIDE</div>
+    <div class="small">
+      mouse — look around &nbsp;·&nbsp; <kbd>SPACE</kbd> pause &nbsp;·&nbsp; <kbd>1</kbd>-<kbd>4</kbd> speed &nbsp;·&nbsp; click the mini-map to time-travel<br/>
+      <kbd>M</kbd> sound &nbsp;·&nbsp; <kbd>C</kbd> hide HUD &nbsp;·&nbsp; <kbd>R</kbd> restart &nbsp;·&nbsp; <kbd>ESC</kbd> station
+    </div>
+  </div>
+
+  <div id="summary"><div class="panel"><h2 id="summary-title"></h2><div class="rows" id="summary-rows"></div>
+    <button class="btn" id="btn-again">RIDE AGAIN</button>
+    <button class="btn" id="btn-station">BACK TO STATION</button>
+  </div></div>
+
+  <div id="loading">BUILDING COASTER<span id="loading-dots">...</span></div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
