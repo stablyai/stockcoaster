@@ -27,6 +27,7 @@ const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36';
  * points — long enough to feel like a journey, short enough to stay fun.
  */
 const TICKERS = [
+  { symbol: 'SPCX',   name: 'SpaceX',           range: '1d', interval: '1m', minPoints: 24 },
   { symbol: 'NVDA',    name: 'NVIDIA',           range: 'max', interval: '1mo' },
   // explicit period bounds: range=max silently coerces 40-year histories to 3mo bars
   { symbol: 'AAPL',    name: 'Apple',            period1: '1984-12-01', interval: '1mo' },
@@ -81,6 +82,9 @@ function extractPoints(chartJson, symbol) {
     const d = new Date(ts[i] * 1000);
     points.push({
       date: d.toISOString().slice(0, 10),
+      ...(result.meta?.dataGranularity?.endsWith('m') ? {
+        timeLabel: d.toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' }),
+      } : {}),
       t: ts[i],
       close: Math.round(c * 10000) / 10000,
     });
@@ -118,7 +122,10 @@ function attachEvents(points, events) {
   for (let i = 1; i < points.length; i++) gaps.push(points[i].t - points[i - 1].t);
   gaps.sort((a, b) => a - b);
   const medianGap = gaps[Math.floor(gaps.length / 2)] ?? 86400 * 30;
-  const tolerance = Math.max(86400 * 45, medianGap * 0.65);
+  const intraday = medianGap < 3600;
+  const tolerance = intraday
+    ? Math.max(300, medianGap * 8) // one-minute IPO tapes should not pin the whole morning to point zero
+    : Math.max(86400 * 45, medianGap * 0.65);
   const out = [];
   for (const ev of events) {
     const t = new Date(ev.date).getTime() / 1000;
@@ -170,7 +177,7 @@ async function main() {
     try {
       const raw = await fetchChart(cfg);
       const { points, meta } = extractPoints(raw, cfg.symbol);
-      if (points.length < 24) throw new Error(`only ${points.length} points`);
+      if (points.length < (cfg.minPoints ?? 24)) throw new Error(`only ${points.length} points`);
       const stats = buildStats(points);
       const curated = await loadHeadlines(cfg.symbol);
       const ride = {

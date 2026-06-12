@@ -8,6 +8,7 @@ import { lambert } from './textures.js';
 const CRUISE = 17;
 const V_MIN = 7;
 const V_MAX = 64;
+const SPEEDS = { 1: 0.6, 2: 1.0, 3: 1.7, 4: 2.6 };
 
 export class Cart {
   constructor(scene, track, T, camera) {
@@ -18,6 +19,7 @@ export class Cart {
     this.s = 2;             // arc length along track
     this.v = 10;
     this.speedMult = 1;
+    this.speedLevel = 2;
     this.paused = false;
     this.finished = false;
     this.frame = makeFrame();
@@ -60,6 +62,20 @@ export class Cart {
     this.pitch = THREE.MathUtils.clamp(this.pitch, -1.2, 1.25);
   }
 
+  setSpeedLevel(level) {
+    const mult = SPEEDS[level] ?? 1;
+    const oldTarget = CRUISE * this.speedMult;
+    const newTarget = CRUISE * mult;
+    this.speedLevel = level;
+    this.speedMult = mult;
+
+    // Make key presses feel like a control, not a suggestion to the physics loop.
+    // Gravity can still spice the ride, but 1/2/3/4 now immediately lands in a visibly different speed band.
+    if (newTarget > oldTarget) this.v = Math.max(this.v, newTarget * 0.92);
+    else this.v = Math.min(this.v, newTarget * 1.05);
+    this.v = THREE.MathUtils.clamp(this.v, V_MIN * mult, V_MAX * Math.max(1, mult));
+  }
+
   update(dt) {
     if (this.finished) return;
     const u = THREE.MathUtils.clamp(this.s / this.track.length, 0, 1);
@@ -69,8 +85,8 @@ export class Cart {
       const slope = this.frame.tan.y;
       // gravity along track + motor toward cruise speed
       this.v += (-22 * slope) * dt;
-      this.v += (CRUISE * this.speedMult - this.v) * 0.4 * dt;
-      this.v = THREE.MathUtils.clamp(this.v, V_MIN, V_MAX * this.speedMult * 1.1);
+      this.v += (CRUISE * this.speedMult - this.v) * 1.25 * dt;
+      this.v = THREE.MathUtils.clamp(this.v, V_MIN * this.speedMult, V_MAX * Math.max(1, this.speedMult));
       this.s += this.v * dt;
       if (this.s >= this.track.length - 1.2) {
         this.s = this.track.length - 1.2;
@@ -121,6 +137,7 @@ export class Cart {
   restart() {
     this.s = 2;
     this.v = 10;
+    this.setSpeedLevel(2);
     this.finished = false;
     this.yaw = 0;
     this.pitch = 0;

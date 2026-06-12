@@ -34,7 +34,21 @@ function wrap(ctx, text, maxW) {
 
 function panelTexture({ title, dateLabel, sentiment = 'neutral', big = false }) {
   const s = SENTIMENT[sentiment] ?? SENTIMENT.neutral;
-  const W = 128, H = 80;
+  const W = 128;
+
+  // Measure first, then grow the sign canvas vertically. Long IPO headlines used
+  // to overflow a fixed 80px texture; now every wrapped line gets real pixels.
+  const measure = document.createElement('canvas');
+  measure.width = W; measure.height = 1;
+  const mctx = measure.getContext('2d');
+  const fontPx = big && String(title).length < 64 ? 10 : 9;
+  const lineH = fontPx + 3;
+  mctx.font = `bold ${fontPx}px monospace`;
+  const lines = wrap(mctx, title, W - 18);
+  const top = dateLabel ? 26 : 14;
+  const bottom = 8;
+  const H = Math.max(80, top + lines.length * lineH + bottom);
+
   const lo = document.createElement('canvas');
   lo.width = W; lo.height = H;
   const ctx = lo.getContext('2d');
@@ -56,12 +70,8 @@ function panelTexture({ title, dateLabel, sentiment = 'neutral', big = false }) 
     ctx.fillText(dateLabel, W / 2, 16);
   }
   ctx.fillStyle = '#2b1d0e';
-  ctx.font = `bold ${big ? 10 : 9}px monospace`;
-  const lines = wrap(ctx, title, W - 16).slice(0, 5);
-  const lineH = big ? 12 : 11;
-  let y = (dateLabel ? 24 : 12) + lineH;
-  const free = H - 6 - y;
-  y += Math.max(0, (free - (lines.length - 1) * lineH) / 2 - lineH / 2);
+  ctx.font = `bold ${fontPx}px monospace`;
+  let y = top + fontPx;
   for (const l of lines) { ctx.fillText(l, W / 2, y); y += lineH; }
 
   // upscale 4x with no smoothing -> chunky pixels
@@ -76,6 +86,8 @@ function panelTexture({ title, dateLabel, sentiment = 'neutral', big = false }) 
   tex.minFilter = THREE.LinearMipmapLinearFilter;
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
+  tex.userData.aspect = W / H;
+  tex.userData.lineCount = lines.length;
   return tex;
 }
 
@@ -98,6 +110,8 @@ function makeSign(tex, w, h, T, frameColor = 0x6b4a2a) {
     post.position.set(side * (w / 2 - 0.35), -(h / 4 + 1.8), -0.16);
     g.add(post);
   }
+  g.userData.panelWidth = w;
+  g.userData.panelHeight = h;
   return g;
 }
 
@@ -116,7 +130,10 @@ export function buildBillboards(track, T, theme, ride) {
     tangent.normalize();
     const lat = new THREE.Vector3(-tangent.z, 0, tangent.x);
     sign.position.copy(cp).addScaledVector(lat, side * dist);
-    sign.position.y = cp.y + lift;
+    const surfaceY = groundHeight(sign.position.x, sign.position.z, ride.symbol);
+    const panelH = sign.userData.panelHeight ?? 4.6;
+    // Low launch-day tracks can sit inside a trench; signs should read above the nearby terrain, not drown in it.
+    sign.position.y = Math.max(cp.y + lift, surfaceY + panelH * 0.5 + 4.1);
     // face a spot on the track ~4 points back, where the rider reads it from
     const back = track.controlPoints[Math.max(0, i - 4)];
     lookTarget.set(back.x, sign.position.y, back.z);
@@ -133,17 +150,25 @@ export function buildBillboards(track, T, theme, ride) {
     const count = stacked.get(h.pointIndex) ?? 0;
     stacked.set(h.pointIndex, count + 1);
     const imp = h.importance ?? 1;
-    const scale = imp === 3 ? 1.45 : imp === 2 ? 1.18 : 1.0;
+    const launchOpening = theme.launchDay && h.pointIndex < 12;
+    const baseScale = imp === 3 ? 1.45 : imp === 2 ? 1.18 : 1.0;
+    // The first SPCX minutes are dense; keep opening signs readable without giant panels filling the camera.
+    const scale = launchOpening ? Math.min(baseScale, 0.92) : baseScale;
     const tex = panelTexture({
       title: h.title,
       dateLabel: fmtDate(h.date),
       sentiment: h.sentiment,
       big: imp >= 3,
     });
-    const sign = makeSign(tex, 7.4 * scale, 4.6 * scale, T, theme.signFrame);
+    const signW = 7.4 * scale;
+    const signH = signW / (tex.userData.aspect || 1.6);
+    const sign = makeSign(tex, signW, signH, T, theme.signFrame);
     const s = count % 2 === 0 ? side : -side;
-    const tier = Math.floor(count / 2);
-    place(sign, h.pointIndex, s, 9.5 + imp * 0.8 + tier * 7, 2.4 + scale + tier * 3.4);
+    const tier = launchOpening ? 0 : Math.floor(count / 2);
+    const visualIndex = launchOpening ? Math.min(n - 1, h.pointIndex + 5) : h.pointIndex;
+    const dist = launchOpening ? 13.5 + imp * 0.35 : 9.5 + imp * 0.8 + tier * 7;
+    const lift = launchOpening ? 9.5 + scale + count * 0.55 : 2.4 + scale + tier * 3.4;
+    place(sign, visualIndex, s, dist, lift);
     if (count === 0) side *= -1;
   }
 
@@ -194,7 +219,8 @@ export function buildBillboards(track, T, theme, ride) {
     banner.position.y = 5.5;
     arch.add(banner);
 
-    arch.position.set(cp.x, cp.y, cp.z);
+    const archGround = groundHeight(cp.x, cp.z, ride.symbol);
+    arch.position.set(cp.x, Math.max(cp.y, archGround + 1.4), cp.z);
     const yaw = Math.atan2(dir.x, dir.z);
     arch.rotation.y = yaw;
     group.add(arch);

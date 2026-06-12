@@ -1,0 +1,14 @@
+import { chromium } from 'playwright';
+const browser = await chromium.launch({ headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+const errors = [];
+page.on('pageerror', e => errors.push(e.message));
+await page.goto('https://stockcoaster.vercel.app', { waitUntil: 'networkidle' });
+await page.waitForTimeout(1500);
+console.log('ride cards:', await page.locator('.ride-card').count());
+await page.goto('https://stockcoaster.vercel.app/?ride=NVDA&go=1', { waitUntil: 'networkidle' });
+await page.waitForTimeout(5000);
+console.log('riding:', (await page.textContent('#hud-date'))?.trim().slice(0, 20), '|', (await page.textContent('#hud-zone'))?.trim());
+await page.screenshot({ path: '/Users/nwparker/orca/workspaces/stockcoaster/v1/test/shots/13-production.png' });
+console.log('pageerrors:', errors.length ? errors : 'none');
+await browser.close();

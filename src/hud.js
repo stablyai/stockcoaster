@@ -36,6 +36,8 @@ export class Hud {
     this.athUntil = 0;
     this.toastQueue = [];
     this.cinematic = false;
+    this.speedFlashUntil = 0;
+    this.speedLevel = 2;
     this.chartCtx = this.el.chart.getContext('2d');
 
     // click the minimap to jump to that point in history
@@ -69,6 +71,8 @@ export class Hud {
     this.el.hud.classList.add('active');
     this.el.symbol.innerHTML = `${esc(ride.symbol)}<small>${esc(ride.name)}</small>`;
     this.el.hint.textContent = 'SPACE pause · 1-4 speed · click map to time-travel · ESC station';
+    this.speedLevel = 2;
+    this.speedFlashUntil = 0;
     this.prepChart(ride);
     this.lastIndex = -1;
   }
@@ -82,6 +86,11 @@ export class Hud {
   toggleCinematic() {
     this.cinematic = !this.cinematic;
     this.el.hud.style.opacity = this.cinematic ? '0' : '1';
+  }
+
+  flashSpeed(level) {
+    this.speedLevel = level;
+    this.speedFlashUntil = performance.now() + 1400;
   }
 
   prepChart(ride) {
@@ -124,14 +133,17 @@ export class Hud {
     if (index !== this.lastIndex) {
       this.lastIndex = index;
       const p = ride.points[index];
-      const [y, m] = p.date.split('-').map(Number);
-      this.el.date.innerHTML = `${MONTHS_FULL[m - 1]} ${y}<small>${esc(ride.symbol)} RIDE</small>`;
+      const [y, m, d] = p.date.split('-').map(Number);
+      const day = p.timeLabel ? ` ${d}` : '';
+      const time = p.timeLabel ? ` · ${esc(p.timeLabel)}` : '';
+      this.el.date.innerHTML = `${MONTHS_FULL[m - 1]}${day} ${y}${time}<small>${esc(ride.symbol)} RIDE</small>`;
       const pct = p.close / ride.points[0].close - 1;
       this.el.price.innerHTML =
         `${fmtMoney(p.close, ride.currency)}<span class="pct ${pct >= 0 ? 'up' : 'down'}">${fmtPct(pct)} since start</span>`;
     }
+    const speedFlash = performance.now() < this.speedFlashUntil ? ` · SPEED ${this.speedLevel}` : '';
     this.el.zone.innerHTML =
-      `${zoneInfo.icon} ${zoneInfo.label}<span class="speed">${Math.round(speed * 2.43)} MPH</span>`;
+      `${zoneInfo.icon} ${zoneInfo.label}${speedFlash}<span class="speed">${Math.round(speed * 2.43)} MPH</span>`;
 
     // chart: base + played-overlay + dot
     const ctx = this.chartCtx;

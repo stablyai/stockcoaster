@@ -36,6 +36,41 @@ export class Effects {
     this.sparkleAcc = 0;
   }
 
+  /** IPO launch-show rockets: flame columns, smoke, and blocky fireworks above the rider. */
+  launchShow(camPos, forwardDir) {
+    const right = new THREE.Vector3(-forwardDir.z, 0, forwardDir.x).normalize();
+    const base = camPos.clone()
+      .addScaledVector(forwardDir, 95 + Math.random() * 70)
+      .addScaledVector(right, (Math.random() < 0.5 ? -1 : 1) * (35 + Math.random() * 55));
+    base.y = Math.max(camPos.y - 32, 18);
+    const top = base.clone();
+    top.y = camPos.y + 80 + Math.random() * 75;
+
+    // The rising rocket trail: hot core with chunky white smoke falling behind it.
+    for (let i = 0; i < 42; i++) {
+      const k = i / 41;
+      const p = base.clone().lerp(top, k);
+      p.x += (Math.random() - 0.5) * (1 + k * 7);
+      p.z += (Math.random() - 0.5) * (1 + k * 7);
+      const hot = k > 0.72;
+      this.spawn(
+        p,
+        new THREE.Vector3((Math.random() - 0.5) * 2, hot ? 8 + Math.random() * 8 : -1 - Math.random() * 2, (Math.random() - 0.5) * 2),
+        hot ? (Math.random() < 0.55 ? 0xfde047 : 0xf97316) : (Math.random() < 0.55 ? 0xe5e7eb : 0x94a3b8),
+        hot ? 0.34 : 0.48,
+        hot ? 0.9 : 1.8,
+        hot ? -4 : 0,
+      );
+    }
+
+    // Blocky firework blossom.
+    const colors = [0xf97316, 0xfde047, 0x60a5fa, 0xc4b5fd, 0xffffff, 0x4ade80];
+    for (let i = 0; i < 115; i++) {
+      _v.randomDirection().multiplyScalar(12 + Math.random() * 30);
+      this.spawn(top, _v.clone(), colors[i % colors.length], 0.28, 1.0 + Math.random() * 1.0, -5);
+    }
+  }
+
   spawn(pos, vel, color, size, life, gravity = 0) {
     const p = this.parts[this.cursor];
     this.cursor = (this.cursor + 1) % MAX;
