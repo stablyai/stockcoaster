@@ -70,7 +70,7 @@ export class Hud {
     this.athUntil = 0;
     this.el.hud.classList.add('active');
     this.el.symbol.innerHTML = `${esc(ride.symbol)}<small>${esc(ride.name)}</small>`;
-    this.el.hint.textContent = 'SPACE pause · 1-4 speed · click map to time-travel · ESC station';
+    this.el.hint.textContent = 'SPACE pause · paused: S screenshot · 1-4 speed · click map to time-travel · ESC station';
     this.speedLevel = 2;
     this.speedFlashUntil = 0;
     this.prepChart(ride);
