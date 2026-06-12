@@ -1,0 +1,22 @@
+{
+  "companyName": "SpaceX",
+  "theme": "launch",
+  "tagline": "IPO day as a launch sequence: open at $150, rip toward orbit, then survive first-day gravity.",
+  "headlines": [
+    { "date": "2026-06-12T11:46:00-04:00", "title": "SpaceX begins trading on Nasdaq under SPCX after pricing its IPO at $135", "sentiment": "pos", "importance": 3 },
+    { "date": "2026-06-12T11:47:00-04:00", "title": "Shares open near $150, an 11% liftoff from IPO price", "sentiment": "pos", "importance": 3 },
+    { "date": "2026-06-12T11:55:00-04:00", "title": "Retail demand and scarce float turn the first minutes into a rocket burn", "sentiment": "pos", "importance": 2 },
+    { "date": "2026-06-12T12:30:00-04:00", "title": "Valuation debate ignites over Starlink, Starship, AI ambitions, and cash burn", "sentiment": "neutral", "importance": 2 },
+    { "date": "2026-06-12T13:09:00-04:00", "title": "SPCX tags its first-day high as traders chase the biggest IPO story on Earth", "sentiment": "pos", "importance": 3 },
+    { "date": "2026-06-12T13:45:00-04:00", "title": "Volume surges past hundreds of millions of shares as SPCX price discovery gets violent", "sentiment": "neutral", "importance": 2 },
+    { "date": "2026-06-12T15:44:00-04:00", "title": "Gravity check: first-day profit taking shakes out the launch tourists", "sentiment": "neg", "importance": 2 },
+    { "date": "2026-06-12T16:00:00-04:00", "title": "Closing burn: SpaceX ends day one at $160.95, about 19% above IPO price", "sentiment": "pos", "importance": 3 }
+  ],
+  "milestones": [
+    { "date": "2026-06-12T11:46:00-04:00", "label": "IPO PRICED AT $135", "kind": "ipo" },
+    { "date": "2026-06-12T11:47:00-04:00", "label": "OPENING TRADE NEAR $150", "kind": "launch" },
+    { "date": "2026-06-12T13:09:00-04:00", "label": "FIRST-DAY HIGH $176.45", "kind": "ath" },
+    { "date": "2026-06-12T15:44:00-04:00", "label": "PRICE DISCOVERY MAX-Q", "kind": "volatility" },
+    { "date": "2026-06-12T16:00:00-04:00", "label": "DAY ONE CLOSE $160.95", "kind": "close" }
+  ]
+}

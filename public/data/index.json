@@ -1,5 +1,18 @@
 [
   {
+    "symbol": "SPCX",
+    "name": "SpaceX",
+    "tagline": "IPO day as a launch sequence: open at $150, rip toward orbit, then survive first-day gravity.",
+    "theme": "launch",
+    "points": 255,
+    "start": "2026-06-12",
+    "end": "2026-06-12",
+    "totalReturn": 0.06216590774104125,
+    "multiple": 1.163267999736026,
+    "maxDrawdown": 0.10339252283428846,
+    "headlines": 8
+  },
+  {
     "symbol": "NVDA",
     "name": "NVIDIA Corporation",
     "tagline": "From graphics-card upstart to the $5 trillion engine of the AI age. Hold on.",

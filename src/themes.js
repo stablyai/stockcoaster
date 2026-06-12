@@ -7,6 +7,11 @@ export const THEMES = {
     deadTrees: false, neonOre: false, flowers: [0xfde047, 0xf87171, 0xffffff],
     signFrame: 0x8a5d3b,
   },
+  launch: {
+    grass: 0x1f2937, grassAlt: 0x111827, foliage: 0x334155, trunk: 0x475569,
+    deadTrees: false, neonOre: true, flowers: [0xf97316, 0xfde047, 0x93c5fd, 0xffffff],
+    signFrame: 0x64748b, launchpads: true, rockets: true, launchDay: true,
+  },
   space: {
     grass: 0x6abe30, grassAlt: 0x52b46a, foliage: 0x2f9e54, trunk: 0x6b4a2a,
     deadTrees: false, neonOre: false, flowers: [0xfde047, 0x93c5fd, 0xffffff],

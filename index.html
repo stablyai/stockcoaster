@@ -53,6 +53,27 @@
         repeating-conic-gradient(#3e2f23 0% 25%, #46362a 0% 50%) 0 0/64px 64px;
       padding: 28px 4vw 60px;
     }
+
+    .menu-topline {
+      max-width: 1500px; margin: 0 auto 12px;
+      display: flex; align-items: center; justify-content: center;
+      min-height: 34px; position: relative;
+    }
+    .menu-credit, .menu-repo {
+      display: inline-block;
+      color: #f8fafc; text-decoration: none; letter-spacing: 1px;
+      background: rgba(10, 12, 20, .72);
+      border: 3px solid #1b1b1b;
+      box-shadow: inset 2px 2px 0 rgba(255,255,255,.15), inset -2px -2px 0 rgba(0,0,0,.35);
+      padding: 7px 12px; font-size: 13px; text-shadow: 2px 2px 0 #000;
+    }
+    .menu-credit b { color: var(--gold); }
+    .menu-repo { position: absolute; right: 0; top: 0; color: var(--gold); }
+    .menu-credit:hover, .menu-repo:hover { outline: 3px solid var(--gold); background: rgba(31, 41, 55, .9); }
+    @media (max-width: 760px) {
+      .menu-topline { flex-direction: column; gap: 8px; }
+      .menu-repo { position: static; }
+    }
     #menu h1 {
       text-align: center;
       font-size: clamp(28px, 5vw, 54px);

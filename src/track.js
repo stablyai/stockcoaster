@@ -22,8 +22,9 @@ export function buildTrackData(ride, theme) {
   }
   const logSpan = Math.max(1e-9, logMax - logMin);
   const multiple = Math.exp(logSpan);
-  const ySpanMult = theme?.rockets ? 1.25 : 1.0; // meme stocks get extra altitude
-  const ySpan = THREE.MathUtils.clamp(95 * Math.log10(multiple) * ySpanMult, 70, 318);
+  const ySpanMult = theme?.launchDay ? 3.4 : (theme?.rockets ? 1.25 : 1.0); // IPO launch days + meme stocks get extra altitude
+  const minSpan = theme?.launchDay ? 225 : 70;
+  const ySpan = THREE.MathUtils.clamp(95 * Math.log10(multiple) * ySpanMult, minSpan, 318);
 
   // Raw altitudes, then two smoothing passes: keeps the macro chart shape but
   // turns per-bar volatility sawtooth into rideable hills. HUD prices stay raw.

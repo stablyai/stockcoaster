@@ -37,6 +37,7 @@ const state = {
   seenHeadlines: new Set(),
   seenConfetti: new Set(),
   lastDrawdownDeep: false,
+  launchFxAcc: 0,
   time: 0,
 };
 
@@ -89,6 +90,10 @@ function difficulty(ride) {
 function buildMenu(index) {
   const menu = document.getElementById('menu');
   menu.innerHTML = `
+    <div class="menu-topline">
+      <a class="menu-credit" href="https://github.com/stablyai/orca" target="_blank" rel="noopener noreferrer">Built using <b>Orca</b></a>
+      <a class="menu-repo" href="https://github.com/stablyai/stockcoaster" target="_blank" rel="noopener noreferrer">GitHub Repo ↗</a>
+    </div>
     <h1>⛏ STOCKCOASTER 📈</h1>
     <div class="subtitle">EVERY CHART IS A ROLLERCOASTER. CHOOSE YOUR RIDE.</div>
     <div id="rides"></div>
@@ -178,6 +183,7 @@ async function startRide(symbol) {
   state.seenHeadlines = new Set();
   state.seenConfetti = new Set();
   state.lastDrawdownDeep = false;
+  state.launchFxAcc = 0;
 
   document.getElementById('menu').style.display = 'none';
   document.getElementById('loading').style.display = 'none';
@@ -306,20 +312,43 @@ hud.onSeek = index => {
   }
 };
 
-document.addEventListener('keydown', e => {
+function speedLevelFromKey(e) {
+  // Real browsers/keyboards can report either physical codes, typed chars,
+  // numpad codes, or shifted symbols. Accept all of them for speed control.
+  const codeMatch = /^(?:Digit|Numpad)([1-4])$/.exec(e.code || '');
+  if (codeMatch) return Number(codeMatch[1]);
+  const key = String(e.key || '');
+  if (/^[1-4]$/.test(key)) return Number(key);
+  return ({ '!': 1, '@': 2, '#': 3, '$': 4 })[key] ?? 0;
+}
+
+function onRideKeydown(e) {
   if (state.mode !== 'riding') return;
-  switch (e.code) {
+
+  const speedLevel = speedLevelFromKey(e);
+  if (speedLevel) {
+    e.preventDefault();
+    e.stopPropagation();
+    state.cart.setSpeedLevel(speedLevel);
+    hud.flashSpeed(speedLevel);
+    return;
+  }
+
+  switch (e.code || e.key) {
     case 'Space':
+    case ' ':
       e.preventDefault();
       if (lockHint.style.display !== 'flex') state.paused = !state.paused;
       break;
-    case 'Digit1': state.cart.speedMult = 0.6; break;
-    case 'Digit2': state.cart.speedMult = 1.0; break;
-    case 'Digit3': state.cart.speedMult = 1.7; break;
-    case 'Digit4': state.cart.speedMult = 2.6; break;
-    case 'KeyM': audio.toggleMute(); break;
-    case 'KeyC': hud.toggleCinematic(); break;
+    case 'KeyM':
+    case 'm':
+    case 'M': audio.toggleMute(); break;
+    case 'KeyC':
+    case 'c':
+    case 'C': hud.toggleCinematic(); break;
     case 'KeyR':
+    case 'r':
+    case 'R':
       state.cart.restart();
       state.seenHeadlines.clear();
       state.seenConfetti.clear();
@@ -331,7 +360,10 @@ document.addEventListener('keydown', e => {
       if (lockHint.style.display === 'flex' || state.cart?.finished) exitToMenu();
       break;
   }
-});
+}
+
+document.addEventListener('keydown', onRideKeydown, { capture: true });
+window.addEventListener('keydown', onRideKeydown, { capture: true });
 
 document.getElementById('btn-again').addEventListener('click', () => {
   state.cart.restart();
@@ -383,6 +415,17 @@ function rideEvents(dt) {
   if (meta.gain > 0.35 && !cart.paused) {
     _back.copy(cart.frame.tan).negate();
     state.effects.rocketBoost(cart.frame.pos, _back);
+  }
+
+  // SPCX launch-day spectacle: keep firing rockets into the sky while the IPO tape runs.
+  if (ride.theme === 'launch') {
+    state.launchFxAcc += dt;
+    const fastMove = meta.gain > 0.012 || meta.drawdown > 0.06;
+    if (state.launchFxAcc > (fastMove ? 1.15 : 2.35)) {
+      state.launchFxAcc = 0;
+      state.effects.launchShow(cart.frame.pos, cart.frame.tan);
+      if (Math.random() < 0.35) state.effects.launchShow(cart.frame.pos, cart.frame.tan);
+    }
   }
 }
 
