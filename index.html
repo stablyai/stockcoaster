@@ -55,24 +55,58 @@
     }
 
     .menu-topline {
-      max-width: 1500px; margin: 0 auto 12px;
-      display: flex; align-items: center; justify-content: center;
-      min-height: 34px; position: relative;
+      max-width: 1500px; margin: 0 auto 18px;
+      display: flex; align-items: flex-start; justify-content: center;
+      min-height: 96px; position: relative;
     }
     .menu-credit, .menu-repo {
-      display: inline-block;
       color: #f8fafc; text-decoration: none; letter-spacing: 1px;
-      background: rgba(10, 12, 20, .72);
+      background: rgba(10, 12, 20, .78);
       border: 3px solid #1b1b1b;
-      box-shadow: inset 2px 2px 0 rgba(255,255,255,.15), inset -2px -2px 0 rgba(0,0,0,.35);
-      padding: 7px 12px; font-size: 13px; text-shadow: 2px 2px 0 #000;
+      box-shadow: inset 3px 3px 0 rgba(255,255,255,.16), inset -3px -3px 0 rgba(0,0,0,.38), 0 0 0 0 rgba(252,211,77,0);
+      text-shadow: 2px 2px 0 #000;
     }
-    .menu-credit b { color: var(--gold); }
-    .menu-repo { position: absolute; right: 0; top: 0; color: var(--gold); }
-    .menu-credit:hover, .menu-repo:hover { outline: 3px solid var(--gold); background: rgba(31, 41, 55, .9); }
+    .menu-credit {
+      position: relative; display: inline-flex; align-items: center; gap: 14px;
+      padding: 10px 18px 10px 14px; font-size: 16px;
+      border-color: #fcd34d; background: linear-gradient(180deg, rgba(30,41,59,.96), rgba(10,12,20,.9));
+      transform-origin: center top;
+      animation: orcaCtaBob 1.9s steps(2, end) infinite, orcaCtaGlow 1.25s ease-in-out infinite alternate;
+    }
+    .menu-credit::before {
+      content: 'CLICK THE ORCA'; position: absolute; left: 50%; top: -18px; transform: translateX(-50%);
+      color: #fcd34d; font-size: 11px; white-space: nowrap; letter-spacing: 2px;
+      text-shadow: 2px 2px 0 #7c2d12;
+      animation: ctaBlink .8s steps(2, end) infinite;
+    }
+    .menu-credit::after {
+      content: '➜'; position: absolute; right: -28px; top: 28px; color: #fcd34d; font-size: 24px;
+      text-shadow: 2px 2px 0 #000; animation: ctaArrow .75s steps(2, end) infinite;
+    }
+    .menu-credit b { color: var(--gold); font-size: 22px; letter-spacing: 2px; }
+    .menu-credit .credit-copy { display: flex; flex-direction: column; line-height: 1.15; }
+    .menu-credit .credit-copy small { color: #93c5fd; font-size: 11px; margin-top: 3px; letter-spacing: 1px; }
+    .pixel-orca {
+      width: 96px; height: 64px; flex: 0 0 auto; image-rendering: pixelated;
+      filter: drop-shadow(4px 4px 0 #000);
+    }
+    .pixel-orca rect { shape-rendering: crispEdges; }
+    .menu-repo {
+      display: inline-block; position: absolute; right: 0; top: 0; color: var(--gold);
+      padding: 7px 12px; font-size: 13px;
+    }
+    .menu-credit:hover, .menu-repo:hover { outline: 3px solid var(--gold); background: rgba(31, 41, 55, .96); }
+    .menu-credit:hover { transform: translateY(-4px) scale(1.04); animation-play-state: paused; }
+    @keyframes orcaCtaBob { 0%,100% { translate: 0 0; } 50% { translate: 0 -4px; } }
+    @keyframes orcaCtaGlow { from { box-shadow: inset 3px 3px 0 rgba(255,255,255,.16), inset -3px -3px 0 rgba(0,0,0,.38), 0 0 0 rgba(252,211,77,0); } to { box-shadow: inset 3px 3px 0 rgba(255,255,255,.22), inset -3px -3px 0 rgba(0,0,0,.42), 0 0 22px rgba(252,211,77,.85); } }
+    @keyframes ctaBlink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: .35; } }
+    @keyframes ctaArrow { 0%,100% { transform: translateX(0); } 50% { transform: translateX(6px); } }
     @media (max-width: 760px) {
-      .menu-topline { flex-direction: column; gap: 8px; }
+      .menu-topline { flex-direction: column; align-items: center; gap: 12px; min-height: 0; padding-top: 16px; }
       .menu-repo { position: static; }
+      .menu-credit { font-size: 13px; padding-right: 12px; }
+      .menu-credit::after { display: none; }
+      .pixel-orca { width: 78px; height: 52px; }
     }
     #menu h1 {
       text-align: center;
@@ -194,7 +228,7 @@
   <div id="lock-hint">
     <div class="big">CLICK TO RIDE</div>
     <div class="small">
-      mouse — look around &nbsp;·&nbsp; <kbd>SPACE</kbd> pause &nbsp;·&nbsp; <kbd>1</kbd>-<kbd>4</kbd> speed &nbsp;·&nbsp; click the mini-map to time-travel<br/>
+      mouse — look around &nbsp;·&nbsp; <kbd>SPACE</kbd> pause &nbsp;·&nbsp; paused: <kbd>S</kbd> screenshot &nbsp;·&nbsp; <kbd>1</kbd>-<kbd>4</kbd> speed &nbsp;·&nbsp; click the mini-map to time-travel<br/>
       <kbd>M</kbd> sound &nbsp;·&nbsp; <kbd>C</kbd> hide HUD &nbsp;·&nbsp; <kbd>R</kbd> restart &nbsp;·&nbsp; <kbd>ESC</kbd> station
     </div>
   </div>

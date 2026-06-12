@@ -14,7 +14,7 @@ import { sampleAtmosphere } from './zones.js';
 import { fmtPct } from './hud.js';
 
 const canvas = document.getElementById('game');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 renderer.setSize(window.innerWidth, window.innerHeight);
 
@@ -91,14 +91,25 @@ function buildMenu(index) {
   const menu = document.getElementById('menu');
   menu.innerHTML = `
     <div class="menu-topline">
-      <a class="menu-credit" href="https://github.com/stablyai/orca" target="_blank" rel="noopener noreferrer">Built using <b>Orca</b></a>
+      <a class="menu-credit" href="https://github.com/stablyai/orca" target="_blank" rel="noopener noreferrer" aria-label="Built using Orca — open the Orca GitHub repo">
+        <svg class="pixel-orca" viewBox="0 0 96 64" role="img" aria-label="Minecraft-style pixel Orca" xmlns="http://www.w3.org/2000/svg">
+          <rect width="96" height="64" fill="none"/>
+          <rect x="8" y="28" width="8" height="8" fill="#0f172a"/><rect x="16" y="20" width="8" height="8" fill="#0f172a"/><rect x="24" y="12" width="40" height="8" fill="#0f172a"/><rect x="64" y="20" width="16" height="8" fill="#0f172a"/><rect x="80" y="28" width="8" height="8" fill="#0f172a"/>
+          <rect x="16" y="28" width="64" height="16" fill="#020617"/><rect x="24" y="44" width="48" height="8" fill="#e5e7eb"/><rect x="32" y="52" width="24" height="8" fill="#f8fafc"/>
+          <rect x="32" y="20" width="16" height="8" fill="#f8fafc"/><rect x="48" y="20" width="8" height="8" fill="#e5e7eb"/><rect x="68" y="28" width="4" height="4" fill="#f8fafc"/>
+          <rect x="8" y="36" width="8" height="8" fill="#020617"/><rect x="0" y="44" width="8" height="8" fill="#020617"/><rect x="80" y="20" width="8" height="8" fill="#020617"/><rect x="88" y="12" width="8" height="8" fill="#020617"/>
+          <rect x="40" y="4" width="8" height="8" fill="#020617"/><rect x="48" y="0" width="8" height="8" fill="#020617"/><rect x="48" y="8" width="8" height="8" fill="#020617"/>
+          <rect x="20" y="48" width="8" height="8" fill="#94a3b8"/><rect x="72" y="36" width="8" height="8" fill="#334155"/>
+        </svg>
+        <span class="credit-copy"><span>Built using <b>Orca</b></span><small>agent-native code editor</small></span>
+      </a>
       <a class="menu-repo" href="https://github.com/stablyai/stockcoaster" target="_blank" rel="noopener noreferrer">GitHub Repo ↗</a>
     </div>
     <h1>⛏ STOCKCOASTER 📈</h1>
     <div class="subtitle">EVERY CHART IS A ROLLERCOASTER. CHOOSE YOUR RIDE.</div>
     <div id="rides"></div>
     <div class="help-line">
-      mouse — look around · <kbd>SPACE</kbd> pause · <kbd>1</kbd>-<kbd>4</kbd> speed · <kbd>M</kbd> sound · <kbd>C</kbd> hide HUD · <kbd>R</kbd> restart · <kbd>ESC</kbd> back<br/>
+      mouse — look around · <kbd>SPACE</kbd> pause · paused: <kbd>S</kbd> screenshot · <kbd>1</kbd>-<kbd>4</kbd> speed · <kbd>M</kbd> sound · <kbd>C</kbd> hide HUD · <kbd>R</kbd> restart · <kbd>ESC</kbd> back<br/>
       altitude = price (log scale) · read the signs — they're real headlines · the lava pit is the all-time low · space is for the trillion-dollar club
     </div>`;
   const grid = document.getElementById('rides');
@@ -322,6 +333,24 @@ function speedLevelFromKey(e) {
   return ({ '!': 1, '@': 2, '#': 3, '$': 4 })[key] ?? 0;
 }
 
+
+function downloadScreenshot() {
+  if (!canvas || state.mode !== 'riding') return;
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const symbol = state.ride?.symbol ?? 'STOCKCOASTER';
+  canvas.toBlob(blob => {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `stockcoaster-${symbol}-${stamp}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }, 'image/png');
+}
+
 function onRideKeydown(e) {
   if (state.mode !== 'riding') return;
 
@@ -338,7 +367,17 @@ function onRideKeydown(e) {
     case 'Space':
     case ' ':
       e.preventDefault();
+      e.stopImmediatePropagation();
       if (lockHint.style.display !== 'flex') state.paused = !state.paused;
+      break;
+    case 'KeyS':
+    case 's':
+    case 'S':
+      if (state.paused && lockHint.style.display !== 'flex') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        downloadScreenshot();
+      }
       break;
     case 'KeyM':
     case 'm':
@@ -362,7 +401,6 @@ function onRideKeydown(e) {
   }
 }
 
-document.addEventListener('keydown', onRideKeydown, { capture: true });
 window.addEventListener('keydown', onRideKeydown, { capture: true });
 
 document.getElementById('btn-again').addEventListener('click', () => {
