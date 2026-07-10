@@ -65,6 +65,19 @@ await page.goto(BASE + '/?ride=PTON&go=1', { waitUntil: 'networkidle' });
 await page.waitForTimeout(6000);
 await page.screenshot({ path: OUT + '06-pton.png' });
 
+// ---- 5. TOKENS (generic non-stock time series, loaded via ?data=)
+await page.goto(BASE + '/?data=data/TOKENS.json&go=1', { waitUntil: 'networkidle' });
+await page.waitForTimeout(2500);
+const tokPrice1 = await page.textContent('#hud-price');
+console.log('TOKENS value @2.5s:', JSON.stringify(tokPrice1?.trim().slice(0, 40)));
+if (!tokPrice1?.includes('tok')) fail(`expected token unit in HUD value, got ${JSON.stringify(tokPrice1)}`);
+await page.keyboard.press('Digit3');
+await page.waitForTimeout(8000);
+const tokPrice2 = await page.textContent('#hud-price');
+console.log('TOKENS value @10.5s:', JSON.stringify(tokPrice2?.trim().slice(0, 40)));
+if (tokPrice1 === tokPrice2) fail('TOKENS HUD value did not advance — cart appears stuck');
+await page.screenshot({ path: OUT + '07-tokens.png' });
+
 // ---- console errors
 const uniq = [...new Set(errors)];
 console.log(`\nconsole errors/warnings (${uniq.length}):`);

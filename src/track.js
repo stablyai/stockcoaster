@@ -1,5 +1,6 @@
-// Converts a price series into a 3D coaster track.
-//  - altitude = log-scaled price (so a 7000x run reads as cave -> space)
+// Converts a time series into a 3D coaster track.
+//  - altitude = the ride's normalized value (log or linear scale, chosen by
+//    the series layer — so a 7000x stock run reads as cave -> space)
 //  - the path meanders laterally so it feels like a coaster, not a chart
 //  - blocky rails/ties/supports built from instanced boxes
 import * as THREE from 'three';
@@ -14,23 +15,15 @@ export function buildTrackData(ride, theme) {
   const pts = ride.points;
   const n = pts.length;
 
-  let logMin = Infinity, logMax = -Infinity;
-  for (const p of pts) {
-    const l = Math.log(p.close);
-    if (l < logMin) logMin = l;
-    if (l > logMax) logMax = l;
-  }
-  const logSpan = Math.max(1e-9, logMax - logMin);
-  const multiple = Math.exp(logSpan);
   const ySpanMult = theme?.launchDay ? 3.4 : (theme?.rockets ? 1.25 : 1.0); // IPO launch days + meme stocks get extra altitude
   const minSpan = theme?.launchDay ? 225 : 70;
-  const ySpan = THREE.MathUtils.clamp(95 * Math.log10(multiple) * ySpanMult, minSpan, 318);
+  const ySpan = THREE.MathUtils.clamp(95 * ride.spanScore * ySpanMult, minSpan, 318);
 
   // Raw altitudes, then two smoothing passes: keeps the macro chart shape but
-  // turns per-bar volatility sawtooth into rideable hills. HUD prices stay raw.
+  // turns per-bar volatility sawtooth into rideable hills. HUD values stay raw.
   let ys = [];
   for (let i = 0; i < n; i++) {
-    const p = (Math.log(pts[i].close) - logMin) / logSpan;
+    const p = ride.norm(pts[i].value);
     ys.push(Y_BASE + Math.pow(p, 1.12) * ySpan);
   }
   for (let pass = 0; pass < 2; pass++) {
@@ -42,8 +35,7 @@ export function buildTrackData(ride, theme) {
   const meta = [];
   let runningMax = -Infinity;
   for (let i = 0; i < n; i++) {
-    const c = pts[i].close;
-    const p = (Math.log(c) - logMin) / logSpan;
+    const c = pts[i].value;
     const x = i * POINT_SPACING;
     const y = ys[i];
     const z = 34 * Math.sin(x * 0.0045 + 1.7) + 14 * Math.sin(x * 0.013 + 0.5);
@@ -52,16 +44,16 @@ export function buildTrackData(ride, theme) {
     const prevMax = runningMax;
     runningMax = Math.max(runningMax, c);
     meta.push({
-      normPrice: p,
+      normValue: ride.norm(c),
       drawdown: prevMax > 0 ? Math.max(0, 1 - c / prevMax) : 0,
       isATH: c >= runningMax && i > 0,
-      gain: i > 0 ? c / pts[i - 1].close - 1 : 0,
+      gain: i > 0 && pts[i - 1].value > 0 ? c / pts[i - 1].value - 1 : 0,
       trench: false, // filled in below once we know ground height
     });
   }
   for (let i = 0; i < n; i++) {
     const cp = controlPoints[i];
-    meta[i].trench = cp.y < groundHeight(cp.x, cp.z, ride.symbol) + 2.5;
+    meta[i].trench = cp.y < groundHeight(cp.x, cp.z, ride.id) + 2.5;
   }
 
   // ATH parties: a new all-time high only deserves confetti after a real dip
@@ -235,7 +227,7 @@ export function buildTrackMeshes(track, T, theme) {
   for (let i = 0; i < track.controlPoints.length; i += 6) {
     const cp = track.controlPoints[i];
     if (track.meta[i].trench) continue;
-    const gy = groundHeight(cp.x, cp.z, track.ride.symbol);
+    const gy = groundHeight(cp.x, cp.z, track.ride.id);
     if (cp.y - gy < 3) continue;
     pillarPositions.push({ cp, gy });
   }

@@ -3,19 +3,13 @@
 import * as THREE from 'three';
 import { lambert } from './textures.js';
 import { groundHeight } from './terrain.js';
+import { fmtDate } from './series.js';
 
 const SENTIMENT = {
   pos: { frame: '#15803d', accent: '#4ade80', tag: 'GOOD NEWS' },
   neg: { frame: '#b91c1c', accent: '#f87171', tag: 'BAD NEWS' },
   neutral: { frame: '#52525b', accent: '#d4d4d8', tag: 'NEWS' },
 };
-
-const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-
-export function fmtDate(iso) {
-  const [y, m] = iso.split('-').map(Number);
-  return `${MONTHS[(m - 1 + 12) % 12]} ${y}`;
-}
 
 function wrap(ctx, text, maxW) {
   const words = String(text).split(/\s+/);
@@ -130,7 +124,7 @@ export function buildBillboards(track, T, theme, ride) {
     tangent.normalize();
     const lat = new THREE.Vector3(-tangent.z, 0, tangent.x);
     sign.position.copy(cp).addScaledVector(lat, side * dist);
-    const surfaceY = groundHeight(sign.position.x, sign.position.z, ride.symbol);
+    const surfaceY = groundHeight(sign.position.x, sign.position.z, ride.id);
     const panelH = sign.userData.panelHeight ?? 4.6;
     // Low launch-day tracks can sit inside a trench; signs should read above the nearby terrain, not drown in it.
     sign.position.y = Math.max(cp.y + lift, surfaceY + panelH * 0.5 + 4.1);
@@ -156,7 +150,7 @@ export function buildBillboards(track, T, theme, ride) {
     const scale = launchOpening ? Math.min(baseScale, 0.92) : baseScale;
     const tex = panelTexture({
       title: h.title,
-      dateLabel: fmtDate(h.date),
+      dateLabel: h.date ? fmtDate(h.date) : null,
       sentiment: h.sentiment,
       big: imp >= 3,
     });
@@ -219,25 +213,27 @@ export function buildBillboards(track, T, theme, ride) {
     banner.position.y = 5.5;
     arch.add(banner);
 
-    const archGround = groundHeight(cp.x, cp.z, ride.symbol);
+    const archGround = groundHeight(cp.x, cp.z, ride.id);
     arch.position.set(cp.x, Math.max(cp.y, archGround + 1.4), cp.z);
     const yaw = Math.atan2(dir.x, dir.z);
     arch.rotation.y = yaw;
     group.add(arch);
   }
 
-  // --- year marker posts
-  const span = (new Date(ride.points[n - 1].date).getTime() - new Date(ride.points[0].date).getTime()) / 31557600000;
-  const step = span > 24 ? 5 : 1;
-  let lastYear = null;
-  for (let i = 0; i < n; i++) {
-    const year = Number(ride.points[i].date.slice(0, 4));
-    if (year !== lastYear) {
-      lastYear = year;
-      if (i === 0 || year % step !== 0) continue;
-      const tex = panelTexture({ title: String(year), sentiment: 'neutral', big: true });
-      const sign = makeSign(tex, 3.0, 1.9, T, theme.signFrame);
-      place(sign, i, (year % 2) * 2 - 1, 6.5, 1.1);
+  // --- year marker posts (only for series with dated points)
+  if (ride.hasDates) {
+    const span = (new Date(ride.points[n - 1].date).getTime() - new Date(ride.points[0].date).getTime()) / 31557600000;
+    const step = span > 24 ? 5 : 1;
+    let lastYear = null;
+    for (let i = 0; i < n; i++) {
+      const year = Number(ride.points[i].date.slice(0, 4));
+      if (year !== lastYear) {
+        lastYear = year;
+        if (i === 0 || year % step !== 0) continue;
+        const tex = panelTexture({ title: String(year), sentiment: 'neutral', big: true });
+        const sign = makeSign(tex, 3.0, 1.9, T, theme.signFrame);
+        place(sign, i, (year % 2) * 2 - 1, 6.5, 1.1);
+      }
     }
   }
 
@@ -274,7 +270,7 @@ export function buildStations(track, T, theme, ride) {
   const t0 = new THREE.Vector3().subVectors(track.controlPoints[1], track.controlPoints[0]).setY(0).normalize();
   const start = mkPlatform(track.controlPoints[0], t0);
   const titleTex = panelTexture({
-    title: `${ride.symbol} — ${ride.name}`,
+    title: `${ride.id} — ${ride.name}`,
     dateLabel: 'NOW BOARDING',
     sentiment: 'pos',
     big: true,

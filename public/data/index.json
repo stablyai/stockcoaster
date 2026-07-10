@@ -180,5 +180,18 @@
     "multiple": 532.309729886326,
     "maxDrawdown": 0.75574350807427,
     "headlines": 36
+  },
+  {
+    "symbol": "TOKENS",
+    "name": "Claude Token Usage",
+    "tagline": "One startup's Claude bill, ridden day by day: agent-mode liftoff, one brutal outage, and the caching dividend.",
+    "theme": "crypto",
+    "points": 373,
+    "start": "2025-07-01",
+    "end": "2026-07-08",
+    "totalReturn": 87.92413974686083,
+    "multiple": 186.7662736599887,
+    "maxDrawdown": 0.9502693073082593,
+    "headlines": 11
   }
 ]

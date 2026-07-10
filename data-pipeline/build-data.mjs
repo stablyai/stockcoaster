@@ -4,13 +4,16 @@
  *
  * 1. Fetches full price history for each configured ticker from Yahoo Finance.
  * 2. Merges curated headlines/milestones from data-pipeline/headlines/<SYM>.json.
- * 3. Writes ride-ready JSON to public/data/<SYM>.json plus an index manifest.
+ * 3. Copies custom time-series rides from data-pipeline/series/*.json
+ *    (generic format: { id, name, points: [{ date?, label?, value }], ... }).
+ * 4. Writes ride-ready JSON to public/data/<ID>.json plus an index manifest.
  *
- * Run:  npm run data
+ * Run:  npm run data                (everything)
+ *       npm run data -- --series-only   (skip Yahoo, rebuild custom series + index)
  * Re-run any time; it overwrites the output files. Cached raw responses live in
  * data-pipeline/.cache so repeated runs don't hammer the API (delete to refresh).
  */
-import { mkdir, readFile, writeFile, access } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, access, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -18,6 +21,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const OUT_DIR = path.join(ROOT, 'public', 'data');
 const HEADLINE_DIR = path.join(__dirname, 'headlines');
+const SERIES_DIR = path.join(__dirname, 'series');
 const CACHE_DIR = path.join(__dirname, '.cache');
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36';
@@ -142,78 +146,140 @@ function attachEvents(points, events) {
   return out;
 }
 
+const valOf = p => p.value ?? p.close;
+
 function buildStats(points) {
   let min = Infinity, max = -Infinity, minI = 0, maxI = 0;
   for (let i = 0; i < points.length; i++) {
-    const c = points[i].close;
+    const c = valOf(points[i]);
     if (c < min) { min = c; minI = i; }
     if (c > max) { max = c; maxI = i; }
   }
-  const first = points[0].close, last = points[points.length - 1].close;
+  const first = valOf(points[0]), last = valOf(points[points.length - 1]);
   // Max drawdown
   let peak = -Infinity, mdd = 0, mddI = 0;
   for (let i = 0; i < points.length; i++) {
-    peak = Math.max(peak, points[i].close);
-    const dd = 1 - points[i].close / peak;
+    peak = Math.max(peak, valOf(points[i]));
+    if (peak <= 0) continue;
+    const dd = 1 - valOf(points[i]) / peak;
     if (dd > mdd) { mdd = dd; mddI = i; }
   }
   return {
     min, max, minIndex: minI, maxIndex: maxI,
     first, last,
-    totalReturn: last / first - 1,
-    multiple: max / min,
+    totalReturn: first > 0 ? last / first - 1 : null,
+    multiple: min > 0 ? max / min : null,
     maxDrawdown: mdd, maxDrawdownIndex: mddI,
   };
 }
 
+/**
+ * Custom time-series rides: any JSON in data-pipeline/series/ is passed
+ * through with events attached to point indexes, stats computed, and gets a
+ * slot in the index. Points need { value } and ideally { date }.
+ */
+async function buildCustomSeries() {
+  if (!(await exists(SERIES_DIR))) return [];
+  const files = (await readdir(SERIES_DIR)).filter(f => f.endsWith('.json')).sort();
+  const ids = [];
+  for (const f of files) {
+    try {
+      const json = JSON.parse(await readFile(path.join(SERIES_DIR, f), 'utf8'));
+      const id = json.id ?? json.symbol ?? path.basename(f, '.json');
+      const points = (json.points ?? []).map(p => ({
+        ...p,
+        ...(p.t == null && p.date ? { t: Math.floor(Date.parse(p.date) / 1000) } : {}),
+      }));
+      if (points.length < 2) throw new Error('needs at least 2 points');
+      const hasT = points.every(p => Number.isFinite(p.t));
+      const keepIndexed = evs => (evs ?? []).filter(e => e.pointIndex != null);
+      const ride = {
+        ...json,
+        id,
+        points,
+        stats: buildStats(points),
+        headlines: hasT ? attachEvents(points, json.headlines) : keepIndexed(json.headlines),
+        milestones: hasT ? attachEvents(points, json.milestones) : keepIndexed(json.milestones),
+      };
+      await writeFile(path.join(OUT_DIR, `${id}.json`), JSON.stringify(ride));
+      ids.push(id);
+      console.log(`Series ${id}: ok (${points.length} pts, ${ride.headlines.length} headlines)`);
+    } catch (e) {
+      console.log(`Series ${f}: FAILED: ${e.message}`);
+    }
+  }
+  return ids;
+}
+
+/** Regenerate index.json from whatever ride files exist, in menu order. */
+async function writeIndex(order) {
+  const index = [];
+  for (const id of order) {
+    const file = path.join(OUT_DIR, `${id}.json`);
+    if (!(await exists(file))) continue;
+    const ride = JSON.parse(await readFile(file, 'utf8'));
+    const points = ride.points ?? [];
+    const stats = ride.stats ?? buildStats(points);
+    index.push({
+      symbol: ride.id ?? ride.symbol,
+      name: ride.name,
+      tagline: ride.tagline ?? null,
+      theme: ride.theme ?? null,
+      points: points.length,
+      start: points[0]?.date ?? points[0]?.label ?? null,
+      end: points[points.length - 1]?.date ?? points[points.length - 1]?.label ?? null,
+      totalReturn: stats.totalReturn ?? null,
+      multiple: stats.multiple ?? null,
+      maxDrawdown: stats.maxDrawdown,
+      headlines: ride.headlines?.length ?? 0,
+    });
+  }
+  await writeFile(path.join(OUT_DIR, 'index.json'), JSON.stringify(index, null, 2));
+  return index.length;
+}
+
 async function main() {
+  const seriesOnly = process.argv.includes('--series-only');
   await mkdir(OUT_DIR, { recursive: true });
   await mkdir(CACHE_DIR, { recursive: true });
   await mkdir(HEADLINE_DIR, { recursive: true });
+  await mkdir(SERIES_DIR, { recursive: true });
 
-  const index = [];
-  for (const cfg of TICKERS) {
-    process.stdout.write(`Fetching ${cfg.symbol}... `);
-    try {
-      const raw = await fetchChart(cfg);
-      const { points, meta } = extractPoints(raw, cfg.symbol);
-      if (points.length < (cfg.minPoints ?? 24)) throw new Error(`only ${points.length} points`);
-      const stats = buildStats(points);
-      const curated = await loadHeadlines(cfg.symbol);
-      const ride = {
-        symbol: cfg.symbol,
-        name: curated?.companyName || cfg.name,
-        currency: meta.currency || 'USD',
-        interval: cfg.interval,
-        theme: curated?.theme ?? null,
-        tagline: curated?.tagline ?? null,
-        stats,
-        points,
-        headlines: attachEvents(points, curated?.headlines),
-        milestones: attachEvents(points, curated?.milestones),
-      };
-      await writeFile(path.join(OUT_DIR, `${cfg.symbol}.json`), JSON.stringify(ride));
-      index.push({
-        symbol: cfg.symbol,
-        name: ride.name,
-        tagline: ride.tagline,
-        theme: ride.theme,
-        points: points.length,
-        start: points[0].date,
-        end: points[points.length - 1].date,
-        totalReturn: stats.totalReturn,
-        multiple: stats.multiple,
-        maxDrawdown: stats.maxDrawdown,
-        headlines: ride.headlines.length,
-      });
-      console.log(`ok (${points.length} pts, ${points[0].date} → ${points[points.length - 1].date}, ${ride.headlines.length} headlines)`);
-    } catch (e) {
-      console.log(`FAILED: ${e.message}`);
+  if (!seriesOnly) {
+    for (const cfg of TICKERS) {
+      process.stdout.write(`Fetching ${cfg.symbol}... `);
+      try {
+        const raw = await fetchChart(cfg);
+        const { points, meta } = extractPoints(raw, cfg.symbol);
+        if (points.length < (cfg.minPoints ?? 24)) throw new Error(`only ${points.length} points`);
+        const stats = buildStats(points);
+        const curated = await loadHeadlines(cfg.symbol);
+        const ride = {
+          symbol: cfg.symbol,
+          name: curated?.companyName || cfg.name,
+          currency: meta.currency || 'USD',
+          interval: cfg.interval,
+          theme: curated?.theme ?? null,
+          tagline: curated?.tagline ?? null,
+          stats,
+          points,
+          headlines: attachEvents(points, curated?.headlines),
+          milestones: attachEvents(points, curated?.milestones),
+        };
+        await writeFile(path.join(OUT_DIR, `${cfg.symbol}.json`), JSON.stringify(ride));
+        console.log(`ok (${points.length} pts, ${points[0].date} → ${points[points.length - 1].date}, ${ride.headlines.length} headlines)`);
+      } catch (e) {
+        console.log(`FAILED: ${e.message}`);
+      }
+      await new Promise(r => setTimeout(r, 400)); // be polite to the API
     }
-    await new Promise(r => setTimeout(r, 400)); // be polite to the API
   }
-  await writeFile(path.join(OUT_DIR, 'index.json'), JSON.stringify(index, null, 2));
-  console.log(`\nWrote ${index.length} rides + index.json to public/data/`);
+
+  const seriesIds = await buildCustomSeries();
+  const tickerIds = TICKERS.map(t => t.symbol);
+  const order = [...tickerIds, ...seriesIds.filter(id => !tickerIds.includes(id))];
+  const count = await writeIndex(order);
+  console.log(`\nWrote index.json with ${count} rides to public/data/`);
 }
 
 main().catch(e => { console.error(e); process.exit(1); });
