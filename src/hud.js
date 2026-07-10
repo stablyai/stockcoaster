@@ -1,23 +1,9 @@
-// DOM HUD: date/price readouts, zone label, mini chart with progress,
+// DOM HUD: date/value readouts, zone label, mini chart with progress,
 // headline toasts, ATH flash, ride-end summary.
-import { fmtDate } from './billboards.js';
+import { fmtDate, fmtMoney, fmtPct } from './series.js';
 
 const MONTHS_FULL = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE',
   'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
-
-export function fmtMoney(v, currency = 'USD') {
-  const sym = currency === 'USD' ? '$' : currency + ' ';
-  if (v >= 1000) return sym + v.toLocaleString('en-US', { maximumFractionDigits: 0 });
-  if (v >= 1) return sym + v.toFixed(2);
-  return sym + v.toFixed(4);
-}
-
-export function fmtPct(p) {
-  const v = p * 100;
-  const sign = v >= 0 ? '+' : '';
-  if (Math.abs(v) >= 10000) return `${sign}${(v / 1000).toFixed(1)}k%`;
-  return `${sign}${v.toFixed(Math.abs(v) < 10 ? 1 : 0)}%`;
-}
 
 export class Hud {
   constructor() {
@@ -69,7 +55,7 @@ export class Hud {
     this.toastUntil = 0;
     this.athUntil = 0;
     this.el.hud.classList.add('active');
-    this.el.symbol.innerHTML = `${esc(ride.symbol)}<small>${esc(ride.name)}</small>`;
+    this.el.symbol.innerHTML = `${esc(ride.id)}<small>${esc(ride.name)}</small>`;
     this.el.hint.textContent = 'SPACE pause · paused: S screenshot · 1-4 speed · click map to time-travel · ESC station';
     this.speedLevel = 2;
     this.speedFlashUntil = 0;
@@ -94,7 +80,7 @@ export class Hud {
   }
 
   prepChart(ride) {
-    // pre-render the full log-price polyline to an offscreen canvas
+    // pre-render the full scaled-value polyline to an offscreen canvas
     this.chartBase = document.createElement('canvas');
     this.chartBase.width = this.el.chart.width;
     this.chartBase.height = this.el.chart.height;
@@ -103,16 +89,9 @@ export class Hud {
     ctx.fillStyle = '#0d1117';
     ctx.fillRect(0, 0, W, H);
     const pts = ride.points;
-    let lmin = Infinity, lmax = -Infinity;
-    for (const p of pts) {
-      const l = Math.log(p.close);
-      if (l < lmin) lmin = l;
-      if (l > lmax) lmax = l;
-    }
-    const span = Math.max(1e-9, lmax - lmin);
     this.chartXY = i => [
       4 + (i / (pts.length - 1)) * (W - 8),
-      H - 5 - ((Math.log(pts[i].close) - lmin) / span) * (H - 10),
+      H - 5 - ride.norm(pts[i].value) * (H - 10),
     ];
     ctx.strokeStyle = '#3b4761';
     ctx.lineWidth = 1.5;
@@ -133,13 +112,22 @@ export class Hud {
     if (index !== this.lastIndex) {
       this.lastIndex = index;
       const p = ride.points[index];
-      const [y, m, d] = p.date.split('-').map(Number);
-      const day = p.timeLabel ? ` ${d}` : '';
-      const time = p.timeLabel ? ` · ${esc(p.timeLabel)}` : '';
-      this.el.date.innerHTML = `${MONTHS_FULL[m - 1]}${day} ${y}${time}<small>${esc(ride.symbol)} RIDE</small>`;
-      const pct = p.close / ride.points[0].close - 1;
+      let when;
+      if (p.date) {
+        const [y, m, d] = p.date.split('-').map(Number);
+        const day = p.timeLabel ? ` ${d}` : '';
+        const time = p.timeLabel ? ` · ${esc(p.timeLabel)}` : '';
+        when = `${MONTHS_FULL[m - 1]}${day} ${y}${time}`;
+      } else {
+        when = esc(p.label);
+      }
+      this.el.date.innerHTML = `${when}<small>${esc(ride.id)} RIDE</small>`;
+      const first = ride.points[0].value;
+      const delta = first > 0
+        ? `${fmtPct(p.value / first - 1)} since start`
+        : `${p.value >= first ? '+' : '−'}${esc(ride.fmtValue(Math.abs(p.value - first)))} since start`;
       this.el.price.innerHTML =
-        `${fmtMoney(p.close, ride.currency)}<span class="pct ${pct >= 0 ? 'up' : 'down'}">${fmtPct(pct)} since start</span>`;
+        `${esc(ride.fmtValue(p.value))}<span class="pct ${p.value >= first ? 'up' : 'down'}">${delta}</span>`;
     }
     const speedFlash = performance.now() < this.speedFlashUntil ? ` · SPEED ${this.speedLevel}` : '';
     this.el.zone.innerHTML =
@@ -173,7 +161,7 @@ export class Hud {
       ctx.fillStyle = '#fcd34d';
       ctx.font = 'bold 11px monospace';
       ctx.textAlign = hx > W / 2 ? 'right' : 'left';
-      ctx.fillText(fmtDate(ride.points[this.hoverIndex].date), hx + (hx > W / 2 ? -5 : 5), 13);
+      ctx.fillText(ride.points[this.hoverIndex].label, hx + (hx > W / 2 ? -5 : 5), 13);
       ctx.textAlign = 'left';
     }
 
@@ -192,8 +180,9 @@ export class Hud {
 
   showToast(headline) {
     const s = headline.sentiment === 'pos' ? '#4ade80' : headline.sentiment === 'neg' ? '#f87171' : '#d4d4d8';
+    const when = headline.date ? ` ${esc(fmtDate(headline.date))}` : '';
     this.el.toast.innerHTML =
-      `<span class="toast-date">📰 ${esc(fmtDate(headline.date))}</span><br/><span style="color:${s}">${esc(headline.title)}</span>`;
+      `<span class="toast-date">📰${when}</span><br/><span style="color:${s}">${esc(headline.title)}</span>`;
     this.el.toast.style.display = 'block';
     this.toastUntil = performance.now() + (this.toastQueue.length ? 4200 : 6000);
   }
@@ -207,18 +196,32 @@ export class Hud {
     const stats = ride.stats;
     const last = ride.points[ride.points.length - 1];
     const first = ride.points[0];
-    const years = (new Date(last.date) - new Date(first.date)) / 31557600000;
-    const grand = 1000 * (last.close / first.close);
+    const upClass = ride.up ? 'up' : 'down';
+    const change = stats.totalReturn != null
+      ? fmtPct(stats.totalReturn)
+      : esc(`${ride.fmtValue(stats.first)} → ${ride.fmtValue(stats.last)}`);
     const rows = [
-      ['RIDE', `${ride.symbol} (${fmtDate(first.date)} → ${fmtDate(last.date)})`],
-      ['TOTAL RETURN', `<span class="${stats.totalReturn >= 0 ? 'up' : 'down'}">${fmtPct(stats.totalReturn)}</span>`],
-      ['$1,000 INVESTED', `<span class="${grand >= 1000 ? 'up' : 'down'}">${fmtMoney(grand)}</span>`],
-      ['PEAK ALTITUDE', `${fmtMoney(stats.max, ride.currency)} (${fmtDate(ride.points[stats.maxIndex].date)})`],
-      ['MAX DRAWDOWN', `<span class="down">-${Math.round(stats.maxDrawdown * 100)}%</span>`],
-      ['YEARS RIDDEN', years.toFixed(1)],
+      ['RIDE', esc(`${ride.id} (${first.label} → ${last.label})`)],
+      [ride.currency ? 'TOTAL RETURN' : 'TOTAL CHANGE', `<span class="${upClass}">${change}</span>`],
+      ['PEAK ALTITUDE', esc(`${ride.fmtValue(stats.max)} (${ride.points[stats.maxIndex].label})`)],
+      [ride.currency ? 'MAX DRAWDOWN' : 'WORST DIP', `<span class="down">-${Math.round(stats.maxDrawdown * 100)}%</span>`],
     ];
-    document.getElementById('summary-title').textContent =
-      stats.totalReturn >= 0 ? `YOU SURVIVED ${ride.symbol}!` : `${ride.symbol} TOOK YOUR LUNCH MONEY`;
+    if (ride.currency && stats.first > 0) {
+      const grand = 1000 * (stats.last / stats.first);
+      rows.splice(2, 0,
+        ['$1,000 INVESTED', `<span class="${grand >= 1000 ? 'up' : 'down'}">${fmtMoney(grand)}</span>`]);
+    }
+    if (ride.hasDates) {
+      const years = (new Date(last.date) - new Date(first.date)) / 31557600000;
+      rows.push(years >= 1
+        ? ['YEARS RIDDEN', years.toFixed(1)]
+        : ['DAYS RIDDEN', Math.max(1, Math.round(years * 365.25)).toString()]);
+    } else {
+      rows.push(['POINTS RIDDEN', String(ride.points.length)]);
+    }
+    document.getElementById('summary-title').textContent = ride.up
+      ? `YOU SURVIVED ${ride.id}!`
+      : ride.currency ? `${ride.id} TOOK YOUR LUNCH MONEY` : `${ride.id} RODE ALL THE WAY DOWN`;
     document.getElementById('summary-rows').innerHTML =
       rows.map(([k, v]) => `<div>${k}<span>${v}</span></div>`).join('');
     document.getElementById('summary').style.display = 'flex';

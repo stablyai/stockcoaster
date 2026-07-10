@@ -26,6 +26,8 @@ which is copied in automatically). Tip: jump straight onto a coaster with
 
 13 coasters, each themed by its story: NVDA, AAPL, MSFT, AMZN, TSLA, META, NFLX,
 GME (meme), COIN & BTC-USD (crypto), PTON & ZM (boom-bust rust), SPY (scenic index).
+Plus TOKENS — a demo ride built from a *non-stock* series (a startup's daily Claude
+token usage), because the engine now takes any time series (see below).
 
 - **Altitude = log price.** A 7,000x run reads as cave → plains → foothills →
   alpine → cloud layer → stratosphere → outer space.
@@ -35,6 +37,42 @@ GME (meme), COIN & BTC-USD (crypto), PTON & ZM (boom-bust rust), SPY (scenic ind
   fact-checked per ticker; gold arches mark milestones (IPO, splits, $1T club...).
 - **Signs of the times**: year markers, station platforms, a minimap chart HUD
   showing where you are in history.
+
+## Ride any time series
+
+The coaster engine is data-agnostic: a ride is just a JSON time series. Two ways in:
+
+1. **Drop a file in `data-pipeline/series/`** and run `npm run data:series` — it's
+   copied to `public/data/`, events get attached to the nearest points, and it
+   appears in the station menu (that's how the TOKENS demo ride is built, from
+   `data-pipeline/series/TOKENS.json`).
+2. **Point the app at a URL**: `?data=<url>` fetches a series JSON and boards it
+   directly (e.g. `?data=data/TOKENS.json&go=1`). Add `&ride=<ID>` to load it but
+   start a different ride.
+
+The generic format:
+
+```jsonc
+{
+  "id": "TOKENS",                     // short ride id (menu card / HUD / terrain seed)
+  "name": "Claude Token Usage",
+  "tagline": "Optional menu blurb",
+  "theme": "crypto",                  // optional, one of src/themes.js (default: classic)
+  "scale": "log",                     // optional: "log" | "linear"; auto-detected if omitted
+  "unit": { "prefix": "", "suffix": " tok" },   // optional value formatting
+  "points": [                         // the only required bits: 2+ points with values
+    { "date": "2026-01-01", "value": 1500000 },  // date optional; "label" also accepted
+    { "date": "2026-01-02", "value": 1730000 }
+  ],
+  "headlines":  [{ "date": "2026-01-02", "title": "...", "sentiment": "pos", "importance": 2 }],
+  "milestones": [{ "date": "2026-01-02", "label": "1M A DAY" }]
+}
+```
+
+Altitude is the (log- or linear-) scaled value; drawdowns still rain embers, new
+highs still get confetti, and the all-time low still carves the lava trench —
+whatever the series measures. The legacy stock format (`points[].close`,
+`currency`) is still accepted; everything is normalized in `src/series.js`.
 
 ## Controls
 

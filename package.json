@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "data": "node data-pipeline/build-data.mjs"
+    "data": "node data-pipeline/build-data.mjs",
+    "data:series": "node data-pipeline/build-data.mjs --series-only"
   },
   "dependencies": {
     "three": "^0.165.0"

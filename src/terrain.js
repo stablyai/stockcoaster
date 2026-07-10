@@ -35,8 +35,8 @@ function noise2(x, z, seed) {
 }
 
 /** Deterministic terrain height. Used by track supports and terrain alike. */
-export function groundHeight(x, z, symbol) {
-  const seed = hashStr(symbol || 'STONK');
+export function groundHeight(x, z, seedKey) {
+  const seed = hashStr(seedKey || 'STONK');
   const n1 = noise2(x * 0.022 + 31.7, z * 0.022 + 11.3, seed);
   const n2 = noise2(x * 0.006 + 7.1, z * 0.006 + 3.9, seed ^ 0x9e3779b9);
   return 15 + n1 * 5 + n2 * 8;
@@ -44,8 +44,8 @@ export function groundHeight(x, z, symbol) {
 
 export function buildTerrain(track, T, theme) {
   const group = new THREE.Group();
-  const symbol = track.ride.symbol;
-  const seed = hashStr(symbol);
+  const seedKey = track.ride.id;
+  const seed = hashStr(seedKey);
   const n = track.controlPoints.length;
   const box = new THREE.BoxGeometry(1, 1, 1);
 
@@ -63,7 +63,7 @@ export function buildTerrain(track, T, theme) {
     const trench = track.meta[pi].trench;
     for (let dz = -HALF_WIDTH; dz <= HALF_WIDTH; dz += COL) {
       const z = Math.round((cp.z + dz) / COL) * COL;
-      const gh = groundHeight(x, z, symbol);
+      const gh = groundHeight(x, z, seedKey);
       const r = hash2(x * 13, z * 7, seed ^ 0x51ed);
 
       if (trench && Math.abs(z - cp.z) < 10) {

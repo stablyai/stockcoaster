@@ -11,7 +11,7 @@ import { Effects } from './effects.js';
 import { Hud } from './hud.js';
 import { GameAudio } from './audio.js';
 import { sampleAtmosphere } from './zones.js';
-import { fmtPct } from './hud.js';
+import { fmtPct, normalizeRide } from './series.js';
 
 const canvas = document.getElementById('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: true });
@@ -25,7 +25,7 @@ const audio = new GameAudio();
 
 const state = {
   mode: 'menu',          // 'menu' | 'riding'
-  rides: new Map(),      // symbol -> ride json
+  rides: new Map(),      // ride id -> normalized ride
   scene: null,
   sky: null,
   cart: null,
@@ -56,14 +56,37 @@ async function boot() {
     try { return await (await fetch(`data/${e.symbol}.json`)).json(); }
     catch { return null; }
   }));
-  for (const r of rides) if (r) state.rides.set(r.symbol, r);
-  buildMenu(index.filter(e => state.rides.has(e.symbol)));
+  for (const r of rides) {
+    if (!r) continue;
+    const ride = normalizeRide(r);
+    state.rides.set(ride.id, ride);
+  }
 
-  // ?ride=NVDA jumps straight onto a coaster (also used by automated tests)
+  // ?data=<url> rides any time-series JSON (generic or stock format)
   const params = new URLSearchParams(location.search);
+  const dataUrl = params.get('data');
+  let customId = null;
+  if (dataUrl) {
+    try {
+      const ride = normalizeRide(await (await fetch(dataUrl)).json());
+      state.rides.set(ride.id, ride);
+      customId = ride.id;
+    } catch (e) {
+      console.error(`failed to load ?data=${dataUrl}`, e);
+    }
+  }
+  const ordered = index.map(e => state.rides.get(e.symbol)).filter(Boolean);
+  if (customId && !ordered.some(r => r.id === customId)) ordered.push(state.rides.get(customId));
+  buildMenu(ordered);
+
+  // ?ride=NVDA jumps straight onto a coaster (also used by automated tests);
+  // ?data= without ?ride= boards the custom series directly
   const auto = params.get('ride');
-  if (auto && state.rides.has(auto.toUpperCase())) {
-    await startRide(auto.toUpperCase());
+  const startId = auto
+    ? (state.rides.has(auto) ? auto : state.rides.has(auto.toUpperCase()) ? auto.toUpperCase() : null)
+    : customId;
+  if (startId) {
+    await startRide(startId);
     if (params.has('go')) {
       showLockHint(false);
       state.paused = false;
@@ -78,7 +101,8 @@ async function boot() {
 function difficulty(ride) {
   let wild = 0;
   for (let i = 1; i < ride.points.length; i++) {
-    wild = Math.max(wild, Math.abs(ride.points[i].close / ride.points[i - 1].close - 1));
+    const prev = ride.points[i - 1].value;
+    if (prev > 0) wild = Math.max(wild, Math.abs(ride.points[i].value / prev - 1));
   }
   const score = ride.stats.maxDrawdown + wild;
   if (score < 0.8) return ['SCENIC', '#86efac'];
@@ -87,7 +111,7 @@ function difficulty(ride) {
   return ['NIGHTMARE', '#f87171'];
 }
 
-function buildMenu(index) {
+function buildMenu(rides) {
   const menu = document.getElementById('menu');
   menu.innerHTML = `
     <div class="menu-topline">
@@ -113,25 +137,26 @@ function buildMenu(index) {
       altitude = price (log scale) · read the signs — they're real headlines · the lava pit is the all-time low · space is for the trillion-dollar club
     </div>`;
   const grid = document.getElementById('rides');
-  for (const entry of index) {
-    const ride = state.rides.get(entry.symbol);
+  for (const ride of rides) {
     const [diff, diffColor] = difficulty(ride);
     const card = document.createElement('div');
     card.className = 'ride-card panel';
-    const up = ride.stats.totalReturn >= 0;
-    const years = ((new Date(ride.points[ride.points.length - 1].date) - new Date(ride.points[0].date)) / 31557600000).toFixed(0);
+    const span = ride.hasDates
+      ? `${((new Date(ride.points[ride.points.length - 1].date) - new Date(ride.points[0].date)) / 31557600000).toFixed(0)} YRS`
+      : `${ride.points.length} PTS`;
+    const change = ride.stats.totalReturn != null ? fmtPct(ride.stats.totalReturn) : '—';
     card.innerHTML = `
       <div class="difficulty" style="background:${diffColor}">${diff}</div>
-      <h2>${esc(ride.symbol)}</h2>
-      <div class="co">${esc(ride.name)} · ${years} YRS · ${ride.headlines?.length ?? 0} HEADLINES</div>
+      <h2>${esc(ride.id)}</h2>
+      <div class="co">${esc(ride.name)} · ${span} · ${ride.headlines?.length ?? 0} HEADLINES</div>
       <canvas width="264" height="74"></canvas>
       <div class="tagline">${esc(ride.tagline ?? '')}</div>
       <div class="stats">
-        <span>RETURN <b class="${up ? 'up' : 'down'}">${fmtPct(ride.stats.totalReturn)}</b></span>
+        <span>${ride.currency ? 'RETURN' : 'CHANGE'} <b class="${ride.up ? 'up' : 'down'}">${change}</b></span>
         <span>WORST DIP <b class="down">-${Math.round(ride.stats.maxDrawdown * 100)}%</b></span>
       </div>`;
     drawPreview(card.querySelector('canvas'), ride);
-    card.addEventListener('click', () => startRide(ride.symbol));
+    card.addEventListener('click', () => startRide(ride.id));
     grid.appendChild(card);
   }
 }
@@ -142,27 +167,20 @@ function drawPreview(cv, ride) {
   ctx.fillStyle = '#0d1117';
   ctx.fillRect(0, 0, W, H);
   const pts = ride.points;
-  let lmin = Infinity, lmax = -Infinity;
-  for (const p of pts) {
-    const l = Math.log(p.close);
-    if (l < lmin) lmin = l;
-    if (l > lmax) lmax = l;
-  }
-  const span = Math.max(1e-9, lmax - lmin);
-  ctx.strokeStyle = ride.stats.totalReturn >= 0 ? '#4ade80' : '#f87171';
+  ctx.strokeStyle = ride.up ? '#4ade80' : '#f87171';
   ctx.lineWidth = 2;
   ctx.beginPath();
   for (let i = 0; i < pts.length; i++) {
     const x = 3 + (i / (pts.length - 1)) * (W - 6);
-    const y = H - 4 - ((Math.log(pts[i].close) - lmin) / span) * (H - 8);
+    const y = H - 4 - ride.norm(pts[i].value) * (H - 8);
     i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
   }
   ctx.stroke();
 }
 
 // ---------------------------------------------------------------- ride lifecycle
-async function startRide(symbol) {
-  const ride = state.rides.get(symbol);
+async function startRide(id) {
+  const ride = state.rides.get(id);
   if (!ride) return;
   document.getElementById('loading').style.display = 'flex';
   // let the loading overlay actually paint before the synchronous scene build
@@ -245,7 +263,7 @@ function finishRide() {
   showLockHint(false);
   state.paused = false;
   hud.showSummary(state.ride);
-  if (state.ride.stats.totalReturn >= 0) audio.fanfare();
+  if (state.ride.up) audio.fanfare();
   else audio.womp();
 }
 
@@ -337,7 +355,7 @@ function speedLevelFromKey(e) {
 function downloadScreenshot() {
   if (!canvas || state.mode !== 'riding') return;
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const symbol = state.ride?.symbol ?? 'STOCKCOASTER';
+  const symbol = state.ride?.id ?? 'STOCKCOASTER';
   canvas.toBlob(blob => {
     if (!blob) return;
     const url = URL.createObjectURL(blob);
